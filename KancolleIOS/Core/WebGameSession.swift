@@ -9,8 +9,10 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     let store = KCSAPIStore()
 
     @Published private(set) var statusMessage = "準備中"
+    @Published private(set) var currentHost = "-"
     @Published private(set) var gameRectNormalized = CGRect(x: 0, y: 0, width: 1, height: 1)
     @Published private(set) var webProcessRestarts = 0
+    @Published private(set) var memoryWarnings = 0
     @Published private(set) var isSafetyUnlocked = false
     @Published private(set) var safetyTapCount = 0
 
@@ -57,6 +59,9 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         webView.allowsLinkPreview = false
         webView.scrollView.bounces = false
         webView.isOpaque = true
+#if DEBUG
+        webView.isInspectable = true
+#endif
 
         store.onSafetyWarning = { [weak self] ships, reason in
             self?.handleSafetyWarning(ships: ships, reason: reason)
@@ -69,6 +74,7 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.memoryWarnings += 1
                 if self.store.trimTransientStateIfSafe() {
                     self.statusMessage = "メモリ警告：不要な戦闘データを解放"
                 } else {
@@ -168,15 +174,23 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         }
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        currentHost = webView.url?.host ?? currentHost
+        statusMessage = "ページ読み込み中"
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        currentHost = webView.url?.host ?? "-"
         statusMessage = "ページ読み込み完了"
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        currentHost = webView.url?.host ?? currentHost
         statusMessage = "読込エラー: \(error.localizedDescription)"
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        currentHost = webView.url?.host ?? currentHost
         statusMessage = "接続エラー: \(error.localizedDescription)"
     }
 
