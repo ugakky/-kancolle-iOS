@@ -5,7 +5,7 @@ import UserNotifications
 import UIKit
 
 @MainActor
-final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
+final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let store = KCSAPIStore()
 
     @Published private(set) var statusMessage = "準備中"
@@ -21,7 +21,7 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     private var unlockTimer: Timer?
     private var didRequestNotifications = false
 
-    private let startURL = URL(string: "https://games.dmm.com/detail/kancolle/")!
+    private let startURL = URL(string: "https://www.dmm.com/netgame/social/-/gadgets/=/app_id=854854/")!
 
     override init() {
         super.init()
@@ -31,6 +31,7 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
 
         let controller = WKUserContentController()
         if let bridgeURL = Bundle.main.url(forResource: "kcs-bridge", withExtension: "js"),
@@ -51,7 +52,9 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
 
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = false
+        webView.allowsLinkPreview = false
         webView.scrollView.bounces = false
         webView.isOpaque = true
 
@@ -65,8 +68,12 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.statusMessage = "メモリ警告を受信：一時戦闘データを解放"
-                self?.store.trimTransientState()
+                guard let self else { return }
+                if self.store.trimTransientStateIfSafe() {
+                    self.statusMessage = "メモリ警告：不要な戦闘データを解放"
+                } else {
+                    self.statusMessage = "メモリ警告：進撃判定中のHPは安全のため保持"
+                }
             }
         }
     }
@@ -78,13 +85,18 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
 
     func loadGameIfNeeded() {
         guard webView.url == nil else { return }
-        statusMessage = "DMMを読み込み中"
+        statusMessage = "艦これを読み込み中"
         webView.load(URLRequest(url: startURL))
     }
 
     func reloadGame() {
         statusMessage = "再読み込み中"
-        webView.reload()
+        resetSafetyUnlock()
+        if webView.url == nil {
+            webView.load(URLRequest(url: startURL))
+        } else {
+            webView.reloadFromOrigin()
+        }
     }
 
     func requestNotificationPermissionIfNeeded() {
@@ -157,19 +169,42 @@ final class WebGameSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        statusMessage = "ゲームページ読み込み完了"
+        statusMessage = "ページ読み込み完了"
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         statusMessage = "読込エラー: \(error.localizedDescription)"
     }
 
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        statusMessage = "接続エラー: \(error.localizedDescription)"
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        if navigationAction.targetFrame == nil {
+            webView.load(navigationAction.request)
+        }
+        return nil
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         webProcessRestarts += 1
         statusMessage = "WebKitが終了したため復旧中（\(webProcessRestarts)回）"
         resetSafetyUnlock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.webView.reload()
+        store.resetAfterWebProcessTermination()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self else { return }
+            if self.webView.url == nil {
+                self.webView.load(URLRequest(url: self.startURL))
+            } else {
+                self.webView.reload()
+            }
         }
     }
 
