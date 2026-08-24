@@ -148,8 +148,20 @@ final class KCSAPIStore: ObservableObject {
         }
     }
 
-    func trimTransientState() {
+    /// メモリ警告時の軽量化。進撃/撤退の選択中は安全判定に必要な戦闘後HPを保持する。
+    @discardableResult
+    func trimTransientStateIfSafe() -> Bool {
+        guard !choiceActive else { return false }
         battleHP.removeAll(keepingCapacity: false)
+        return true
+    }
+
+    /// WebKitプロセスが終了した場合、古い戦闘状態を進撃判定へ持ち越さない。
+    func resetAfterWebProcessTermination() {
+        battleHP.removeAll(keepingCapacity: false)
+        choiceActive = false
+        uncertain = false
+        uncertainReason = ""
     }
 
     private func displayShip(_ id: Int) -> ShipDisplay? {
