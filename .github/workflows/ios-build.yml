@@ -12,7 +12,7 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
-      - name: Build for iOS Simulator
+      - name: Build app and tests for iOS Simulator
         run: |
           xcodebuild \
             -project KancolleIOS.xcodeproj \
@@ -20,4 +20,4 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build-for-testing
