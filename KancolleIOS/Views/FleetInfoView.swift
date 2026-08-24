@@ -14,8 +14,10 @@ struct FleetInfoView: View {
             List {
                 Section("接続状態") {
                     LabeledContent("状態", value: session.statusMessage)
+                    LabeledContent("現在のホスト", value: session.currentHost)
                     LabeledContent("API取得数", value: "\(store.apiCount)")
                     LabeledContent("最後のAPI", value: store.lastPath.isEmpty ? "-" : store.lastPath)
+                    LabeledContent("メモリ警告", value: "\(session.memoryWarnings)回")
                     LabeledContent("WebKit再起動", value: "\(session.webProcessRestarts)回")
 
                     if store.uncertain {
@@ -34,6 +36,8 @@ struct FleetInfoView: View {
                     Text("HPの * は戦闘APIから計算した戦闘後値です。燃料・弾薬・搭載数は最後に艦これAPIから直接取得できた値です。")
                         .font(.footnote)
                     Text("アプリは生のAPIレスポンス履歴を保存せず、表示に必要な情報だけ保持します。")
+                        .font(.footnote)
+                    Text("メモリ警告中でも進撃/撤退の選択中は戦闘後HPを保持し、安全判定を優先します。")
                         .font(.footnote)
                 }
             }
