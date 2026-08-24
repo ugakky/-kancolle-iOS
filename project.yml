@@ -40,3 +40,15 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
     scheme:
       gatherCoverageData: false
+
+  KancolleIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: KancolleIOSTests
+    dependencies:
+      - target: KancolleIOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.ugakky.kancolleios.tests
