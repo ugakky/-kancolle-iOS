@@ -140,13 +140,17 @@
     /\/api_req_(sortie|combined_battle|battle_midnight)\//.test(path)
   );
 
+  const shouldRead = (url) => {
+    const rawURL = String(url || '');
+    if (!rawURL.includes('/kcsapi/')) return false;
+    return isInteresting(pathOf(rawURL));
+  };
+
   const emit = (url, body, text) => {
     const rawURL = String(url || '');
-    if (!rawURL.includes('/kcsapi/')) return;
+    if (!shouldRead(rawURL)) return;
 
     const path = pathOf(rawURL);
-    if (!isInteresting(path)) return;
-
     const parsed = parse(text);
     if (!parsed || parsed.api_result !== 1) return;
 
@@ -169,14 +173,16 @@
 
     XMLHttpRequest.prototype.send = function(body) {
       const meta = this.__kancolleIOSMeta || {};
-      this.addEventListener('load', () => {
-        try {
-          let text = '';
-          if (!this.responseType || this.responseType === 'text') text = this.responseText || '';
-          else if (this.responseType === 'json') text = JSON.stringify(this.response || {});
-          emit(meta.url, body, text);
-        } catch (_) {}
-      }, { once: true });
+      if (shouldRead(meta.url)) {
+        this.addEventListener('load', () => {
+          try {
+            let text = '';
+            if (!this.responseType || this.responseType === 'text') text = this.responseText || '';
+            else if (this.responseType === 'json') text = JSON.stringify(this.response || {});
+            emit(meta.url, body, text);
+          } catch (_) {}
+        }, { once: true });
+      }
       return originalSend.call(this, body);
     };
   } catch (_) {}
@@ -188,7 +194,7 @@
         const response = await originalFetch.apply(this, arguments);
         try {
           const url = typeof input === 'string' ? input : input?.url;
-          if (String(url || '').includes('/kcsapi/')) {
+          if (shouldRead(url)) {
             response.clone().text().then((text) => emit(url, init.body || '', text)).catch(() => {});
           }
         } catch (_) {}
@@ -196,6 +202,9 @@
       };
     }
   } catch (_) {}
+
+  let lastGameRectKey = '';
+  let rectFrame = 0;
 
   const reportGameRect = () => {
     if (window.top !== window.self || innerWidth <= 0 || innerHeight <= 0) return;
@@ -216,22 +225,38 @@
     });
 
     const rect = candidates[0].rect;
-    post({
-      type: 'gameRect',
-      rect: {
-        x: rect.left / innerWidth,
-        y: rect.top / innerHeight,
-        width: rect.width / innerWidth,
-        height: rect.height / innerHeight
-      }
+    const normalized = {
+      x: rect.left / innerWidth,
+      y: rect.top / innerHeight,
+      width: rect.width / innerWidth,
+      height: rect.height / innerHeight
+    };
+
+    const key = [normalized.x, normalized.y, normalized.width, normalized.height]
+      .map((value) => Math.round(value * 10000))
+      .join(':');
+    if (key === lastGameRectKey) return;
+    lastGameRectKey = key;
+
+    post({ type: 'gameRect', rect: normalized });
+  };
+
+  const requestGameRectReport = () => {
+    if (rectFrame) return;
+    rectFrame = requestAnimationFrame(() => {
+      rectFrame = 0;
+      reportGameRect();
     });
   };
 
   if (window.top === window.self) {
-    addEventListener('resize', reportGameRect, { passive: true });
-    addEventListener('scroll', reportGameRect, { passive: true });
-    setTimeout(reportGameRect, 500);
-    setTimeout(reportGameRect, 1500);
-    setInterval(reportGameRect, 5000);
+    const initialReports = () => {
+      [0, 300, 1000, 2500].forEach((delay) => setTimeout(reportGameRect, delay));
+    };
+    addEventListener('load', initialReports, { once: true });
+    addEventListener('resize', requestGameRectReport, { passive: true });
+    addEventListener('orientationchange', () => setTimeout(reportGameRect, 120), { passive: true });
+    addEventListener('scroll', requestGameRectReport, { passive: true });
+    initialReports();
   }
 })();
