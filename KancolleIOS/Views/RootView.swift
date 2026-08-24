@@ -38,16 +38,15 @@ struct GameView: View {
 
             ZStack(alignment: .topLeading) {
                 WebViewContainer(session: session)
-                    .ignoresSafeArea(edges: .top)
 
                 if store.shouldBlockProgress && !session.isSafetyUnlocked {
                     SafetyBlockerView(session: session, store: store)
                         .frame(
-                            width: gameRect.width * 0.60,
+                            width: gameRect.width * 0.48,
                             height: gameRect.height * 0.84
                         )
                         .position(
-                            x: gameRect.minX + gameRect.width * 0.30,
+                            x: gameRect.minX + gameRect.width * 0.28,
                             y: gameRect.minY + gameRect.height * 0.50
                         )
                         .zIndex(100)
@@ -85,6 +84,10 @@ private struct SafetyBlockerView: View {
 
             Text("進撃系ボタンをロック中")
                 .font(.subheadline.bold())
+
+            Text("通常進撃・ダメコン進撃をまとめてブロック")
+                .font(.caption)
+                .multilineTextAlignment(.center)
 
             Text("進撃する場合だけ、この赤い範囲を3連続タップ")
                 .font(.caption)
